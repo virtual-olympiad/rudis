@@ -1,0 +1,28 @@
+{
+  "name": "vo-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Math-et-al/vo-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Math-et-al/vo-backend/issues"
+  },
+  "homepage": "https://github.com/Math-et-al/vo-backend#readme",
+  "dependencies": {
+    "express": "^4.18.1",
+    "socket.io": "^4.5.1",
+    "typescript": "^4.7.4",
+    "vo-core": "^1.0.0"
+  }
+}
