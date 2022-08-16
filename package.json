@@ -20,7 +20,9 @@
   },
   "homepage": "https://github.com/Math-et-al/vo-backend#readme",
   "dependencies": {
+    "dotenv": "^16.0.1",
     "express": "^4.18.1",
+    "firebase": "^9.9.2",
     "socket.io": "^4.5.1",
     "typescript": "^4.7.4",
     "vo-core": "^1.0.0"
