@@ -1,6 +1,7 @@
 {
     // Some typical compiler options
     "compilerOptions": {
+        "module": "ESNext",
         "target": "ESNext",
         "moduleResolution": "node"
         // ...
