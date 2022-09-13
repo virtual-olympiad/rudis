@@ -1,3 +1,6 @@
+# Gitignore JS for TS
+*.js
+
 # Logs
 logs
 *.log
