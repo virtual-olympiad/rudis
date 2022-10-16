@@ -20,7 +20,7 @@
   },
   "homepage": "https://github.com/Math-et-al/vo-backend#readme",
   "dependencies": {
-    "@supabase/supabase-js": "^1.35.6",
+    "@supabase/supabase-js": "^2.0.0",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
     "socket.io": "^4.5.1",
