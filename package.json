@@ -20,9 +20,9 @@
   },
   "homepage": "https://github.com/Math-et-al/vo-backend#readme",
   "dependencies": {
-    "@supabase/supabase-js": "^2.0.0",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
+    "firebase-admin": "^11.3.0",
     "socket.io": "^4.5.1",
     "typescript": "^4.7.4",
     "vo-core": "^1.0.0"
