@@ -13,50 +13,33 @@ const io = new Server(httpServer, {
     },
 });
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-);
-
-let { data: publicRooms, error, status } = await supabase.from('rooms').select(`id, name, description, mode, players`, { count: 'exact' }).eq('public', 'true');
-console.log(publicRooms);
-
-supabase.channel('public:rooms').on('postgres_changes', {event: '*', schema: '*', table:'rooms'}, async payload => {
-    let { data, error } = await supabase.from('rooms').select(`id, name, description, mode, players`, { count: 'exact' }).eq('public', 'true');
-    publicRooms = data;
-    console.log(publicRooms);
-}).subscribe();
+import { app, auth, rtdb, db } from "./firebase.js";
 
 io.on("connection", (socket: Socket) => {
     console.log(socket.id);
 
-    socket.on("create-room", async ({ user, data: { name, description, mode, isPublic }}) => {
+    socket.on("create-room", async ({ idToken, data }) => {
+        const decoded = await auth.verifyIdToken(idToken);
+        const { roomName: name, roomDescription: description, roomMode: mode, roomPublic } = data;
+        console.log(decoded);
+        console.log(data);
+
         try {
-            const { data, error } = await supabase.from('rooms').upsert([{
+            await rtdb.ref('rooms/test').set({
                 name,
                 description,
-                mode,
-                isPublic,
-                players: JSON.stringify({
-                    [socket.id]: {
-                        user, 
-                        answers: []
-                    }
-                }),
-                created_at: new Date()
-            }]).select();
-    
-            if (error) {
-                throw error;
-            }
-
-            socket.emit('create-room-success', {data});
+                mode, 
+                roomPublic,
+                teamsEnabled: false,
+                maxUsers: 8,
+                users: [{
+                    socketId: socket.id,
+                    userId: decoded.uid
+                }]
+            });
         }
-        catch ({message}) {
-            socket.emit("create-room-error", { data: "Error Creating Room: " + message });
-            console.error("Error Creating Room:", message);
+        catch (error) {
+            console.error(error);
         }
     });
 });
