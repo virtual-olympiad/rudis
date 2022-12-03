@@ -3,7 +3,7 @@
     "compilerOptions": {
         "module": "ESNext",
         "target": "ESNext",
-        "moduleResolution": "node"
+        "moduleResolution": "nodenext"
         // ...
     },
     // NEW: Options for file/directory watching
