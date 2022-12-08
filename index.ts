@@ -13,6 +13,8 @@ const io = new Server(httpServer, {
     },
 });
 
+const PORT = process.env.PORT || 4000;
+
 import { app, auth, rtdb, db } from "./firebase.js";
 
 io.on("connection", (socket: Socket) => {
@@ -48,6 +50,7 @@ io.on("connection", (socket: Socket) => {
                     roomPublic,
                     teamsEnabled: false,
                     maxUsers: 8,
+                    timeLimit: 60,
                     host: {
                         socketId: socket.id,
                         userId: uid
@@ -71,6 +74,36 @@ io.on("connection", (socket: Socket) => {
                 rtdb.ref('authUsers/' + uid).set({
                     room: roomId,
                     socketId: socket.id
+                }),
+                rtdb.ref('gameSettings/' + roomId).set({
+                    contestSelection: {
+                        amc8: true,
+                        amc10: true,
+                        amc12: true,
+                        aime: true
+                    },
+                    contestDetails: {
+                        amc8: {
+                            problemCount: 1,
+                            correctScore: 6,
+                            blankScore: 1.5
+                        },
+                        amc10: {
+                            problemCount: 1,
+                            correctScore: 6,
+                            blankScore: 1.5
+                        },
+                        amc12: {
+                            problemCount: 1,
+                            correctScore: 6,
+                            blankScore: 1.5
+                        },
+                        aime: {
+                            problemCount: 1,
+                            correctScore: 10,
+                            blankScore: 0
+                        }
+                    }
                 })
             ]);
 
@@ -98,7 +131,8 @@ io.on("connection", (socket: Socket) => {
                     let deletePromise = [
                         rtdb.ref('rooms/' + room).remove(),
                         rtdb.ref('roomUsers/' + room).remove(),
-                        rtdb.ref('authUsers/' + userId).remove()
+                        rtdb.ref('authUsers/' + userId).remove(),
+                        rtdb.ref('gameSettings/' + room).remove()
                     ];
 
                     if (roomPublic){
@@ -175,6 +209,43 @@ io.on("connection", (socket: Socket) => {
             console.error(error);
         }
     });
+
+    socket.on("exit-room", async () => {
+        for (const room of socket.rooms){
+            if (room === socket.id){
+                continue;
+            }
+
+            try {
+                const { roomPublic, users }= (await rtdb.ref('rooms/' + room).once('value')).val();
+                const { [socket.id]: { userId }} = users;
+
+                if (Object.keys(users).length <= 1){
+                    let deletePromise = [
+                        rtdb.ref('rooms/' + room).remove(),
+                        rtdb.ref('roomUsers/' + room).remove(),
+                        rtdb.ref('authUsers/' + userId).remove(),
+                        rtdb.ref('gameSettings/' + room).remove()
+                    ];
+
+                    if (roomPublic){
+                        deletePromise.push(rtdb.ref('publicRooms/' + room).remove());
+                    }
+
+                    await Promise.all(deletePromise);
+                    return;
+                }
+
+                await Promise.all([
+                    rtdb.ref('rooms/' + room + '/users/' + socket.id).remove(),
+                    rtdb.ref('roomUsers/' + room + '/responses/' + userId).remove(),
+                    rtdb.ref('authUsers/' + userId).remove()
+                ]);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+    });
 });
 
-httpServer.listen(4000);
+httpServer.listen(PORT);

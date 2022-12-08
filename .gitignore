@@ -1,3 +1,7 @@
+#
+app.yaml
+.gcloudignore
+
 # Logs
 logs
 *.log
