@@ -3,7 +3,8 @@
     "compilerOptions": {
         "module": "ESNext",
         "target": "ESNext",
-        "moduleResolution": "nodenext"
+        "moduleResolution": "nodenext",
+        "resolveJsonModule": true
         // ...
     },
     // NEW: Options for file/directory watching
