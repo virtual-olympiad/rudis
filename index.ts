@@ -325,13 +325,13 @@ io.on("connection", (socket: Socket) => {
             console.log(socket.id + " UID:" + uid + " requests START");
 
             await rtdb.ref("rooms/" + roomId + "/gameStarted").set(true);
-            io.to(roomId).emit("starting-game-generating");
+            io.to(roomId).emit("starting-game");
             const problems = await generateProblems(gameSettings);
             
             console.log(socket.id + " UID:" + uid + " Generated:", problems);
 
             await rtdb.ref("roomUsers/" + roomId + "/problems").set(
-                problems.map(value => value.problem)
+                problems.map(value => value?.problem)
             );
             io.to(roomId).emit("started-game");
             

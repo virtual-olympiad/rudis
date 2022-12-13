@@ -9,20 +9,22 @@ function randomArray(array) {
     }
 }
 const generateProblems = async ({ contestSelection, contestDetails }) => {
-    let generatedProblems = Object.entries(contestSelection).map(([contest, selected], i) => {
+    let generatedProblems = [];
+    Object.entries(contestSelection).forEach(([contest, selected], i) => {
         if (!selected) {
             return;
         }
         const details = contestDetails[contest];
         let contestProblems = problemCache[contest].slice(0);
         randomArray(contestProblems);
-        return contestProblems.slice(0, details.problemCount);
-    }).flat();
+        generatedProblems.push(contestProblems.slice(0, details.problemCount));
+    });
+    generatedProblems = generatedProblems.flat();
     const problems = await Promise.allSettled(generatedProblems.map(problem => parseWikiProblem(problem)));
     return problems.map(({ status, value }, i) => {
         if (status != "fulfilled" || !value?.problem) {
             console.error("ERROR: " + generatedProblems[i] + " failed to resolve");
-            return;
+            return null;
         }
         return value;
     });
