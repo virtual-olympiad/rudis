@@ -1,4 +1,5 @@
-import { parseWikiProblem } from "vo-core";
+import DOMPurify from "isomorphic-dompurify";
+import { parseWikiProblem, renderKatex } from "vo-core";
 import problemCache from './problemPages.json' assert { type: "json" };
 function randomArray(array) {
     for (var i = array.length - 1; i > 0; i--) {
@@ -26,7 +27,10 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
             console.error("ERROR: " + generatedProblems[i] + " failed to resolve");
             return null;
         }
-        return value;
+        return {
+            ...value,
+            problem: DOMPurify.sanitize(renderKatex(value.problem))
+        };
     });
 };
 export { generateProblems };

@@ -1,3 +1,4 @@
+import DOMPurify from "isomorphic-dompurify";
 import { fetchWikiPage, parseWikiProblem, renderKatex } from "vo-core";
 import problemCache from './problemPages.json' assert { type: "json" };
 
@@ -37,7 +38,10 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
             return null;
         }
 
-        return value;
+        return {
+            ...value,
+            problem: DOMPurify.sanitize(renderKatex(value.problem))
+        };
     });
 };
 
