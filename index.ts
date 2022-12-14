@@ -21,6 +21,50 @@ const PORT = process.env.PORT || 4000;
 import { app, auth, rtdb, db } from "./firebase.js";
 import { generateProblems } from "./core.js";
 
+const exitSocketRoom = async (socketId, room)=> {
+    try {
+        const { roomPublic, users } = (
+            await rtdb.ref("rooms/" + room).once("value")
+        ).val();
+
+        const {
+            [socketId]: { userId },
+        } = users;
+
+        if (!userId){
+            return;
+        }
+
+        if (Object.keys(users).length <= 1) {
+            let deletePromise = [
+                rtdb.ref("rooms/" + room).remove(),
+                rtdb.ref("roomUsers/" + room).remove(),
+                rtdb.ref("authUsers/" + userId).remove(),
+                rtdb.ref("gameSettings/" + room).remove(),
+            ];
+
+            if (roomPublic) {
+                deletePromise.push(
+                    rtdb.ref("publicRooms/" + room).remove()
+                );
+            }
+
+            await Promise.all(deletePromise);
+            return;
+        }
+
+        await Promise.all([
+            rtdb.ref("rooms/" + room + "/users/" + socketId).remove(),
+            rtdb
+                .ref("roomUsers/" + room + "/responses/" + userId)
+                .update({ status: "disconnect" }),
+            rtdb.ref("authUsers/" + userId).remove(),
+        ]);
+    } catch (error) {
+        console.error(error);
+    }
+};
+
 io.on("connection", (socket: Socket) => {
     console.log(socket.id + " CONNECTS");
 
@@ -84,7 +128,7 @@ io.on("connection", (socket: Socket) => {
                     responses: {
                         [uid]: {
                             socketId: socket.id,
-                            status: 0,
+                            status: "lobby",
                             response: null,
                         },
                     },
@@ -132,51 +176,6 @@ io.on("connection", (socket: Socket) => {
             });
         } catch (error) {
             console.error(error);
-        }
-    });
-
-    socket.on("disconnecting", async (reason) => {
-        for (const room of socket.rooms) {
-            if (room === socket.id) {
-                continue;
-            }
-
-            try {
-                const { roomPublic, users } = (
-                    await rtdb.ref("rooms/" + room).once("value")
-                ).val();
-                const {
-                    [socket.id]: { userId },
-                } = users;
-
-                if (Object.keys(users).length <= 1) {
-                    let deletePromise = [
-                        rtdb.ref("rooms/" + room).remove(),
-                        rtdb.ref("roomUsers/" + room).remove(),
-                        rtdb.ref("authUsers/" + userId).remove(),
-                        rtdb.ref("gameSettings/" + room).remove(),
-                    ];
-
-                    if (roomPublic) {
-                        deletePromise.push(
-                            rtdb.ref("publicRooms/" + room).remove()
-                        );
-                    }
-
-                    await Promise.all(deletePromise);
-                    return;
-                }
-
-                await Promise.all([
-                    rtdb.ref("rooms/" + room + "/users/" + socket.id).remove(),
-                    rtdb
-                        .ref("roomUsers/" + room + "/responses/" + userId)
-                        .remove(),
-                    rtdb.ref("authUsers/" + userId).remove(),
-                ]);
-            } catch (error) {
-                console.error(error);
-            }
         }
     });
 
@@ -251,48 +250,25 @@ io.on("connection", (socket: Socket) => {
         }
     });
 
+    socket.on("disconnecting", async (reason) => {
+        for (const room of socket.rooms) {
+            if (room === socket.id) {
+                continue;
+            }
+
+            await exitSocketRoom(socket.id, room);
+        }
+    });
+    
     socket.on("exit-room", async () => {
         for (const room of socket.rooms) {
             if (room === socket.id) {
                 continue;
             }
 
-            try {
-                const { roomPublic, users } = (
-                    await rtdb.ref("rooms/" + room).once("value")
-                ).val();
-                const {
-                    [socket.id]: { userId },
-                } = users;
+            await exitSocketRoom(socket.id, room);
 
-                if (Object.keys(users).length <= 1) {
-                    let deletePromise = [
-                        rtdb.ref("rooms/" + room).remove(),
-                        rtdb.ref("roomUsers/" + room).remove(),
-                        rtdb.ref("authUsers/" + userId).remove(),
-                        rtdb.ref("gameSettings/" + room).remove(),
-                    ];
-
-                    if (roomPublic) {
-                        deletePromise.push(
-                            rtdb.ref("publicRooms/" + room).remove()
-                        );
-                    }
-
-                    await Promise.all(deletePromise);
-                    return;
-                }
-
-                await Promise.all([
-                    rtdb.ref("rooms/" + room + "/users/" + socket.id).remove(),
-                    rtdb
-                        .ref("roomUsers/" + room + "/responses/" + userId)
-                        .remove(),
-                    rtdb.ref("authUsers/" + userId).remove(),
-                ]);
-            } catch (error) {
-                console.error(error);
-            }
+            socket.emit("exit-room-success");
         }
     });
 
@@ -331,8 +307,11 @@ io.on("connection", (socket: Socket) => {
             console.log(socket.id + " UID:" + uid + " Generated:", problems);
 
             await rtdb.ref("roomUsers/" + roomId + "/problems").set(
-                problems.map(value => value?.problem)
+                problems.map(value => {
+                    return { problem: value?.problem };
+                })
             );
+
             io.to(roomId).emit("started-game");
             
             /**
