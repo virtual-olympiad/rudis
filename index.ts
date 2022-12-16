@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 
-import { fetchWikiPage, parseWikiProblem, renderKatex } from "vo-core";
+import { fetchWikiPage, parseWikiProblem, parseKatex } from "vo-core";
 
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
@@ -23,7 +23,7 @@ import { generateProblems } from "./core.js";
 
 const exitSocketRoom = async (socketId, room)=> {
     try {
-        const { roomPublic, users } = (
+        const { users } = (
             await rtdb.ref("rooms/" + room).once("value")
         ).val();
 
@@ -38,16 +38,10 @@ const exitSocketRoom = async (socketId, room)=> {
         if (Object.keys(users).length <= 1) {
             let deletePromise = [
                 rtdb.ref("rooms/" + room).remove(),
-                rtdb.ref("roomUsers/" + room).remove(),
+                rtdb.ref("gameInfo/" + room).remove(),
                 rtdb.ref("authUsers/" + userId).remove(),
                 rtdb.ref("gameSettings/" + room).remove(),
             ];
-
-            if (roomPublic) {
-                deletePromise.push(
-                    rtdb.ref("publicRooms/" + room).remove()
-                );
-            }
 
             await Promise.all(deletePromise);
             return;
@@ -56,7 +50,7 @@ const exitSocketRoom = async (socketId, room)=> {
         await Promise.all([
             rtdb.ref("rooms/" + room + "/users/" + socketId).remove(),
             rtdb
-                .ref("roomUsers/" + room + "/responses/" + userId)
+                .ref("gameInfo/" + room + "/responses/" + userId)
                 .update({ status: "disconnect" }),
             rtdb.ref("authUsers/" + userId).remove(),
         ]);
@@ -123,17 +117,16 @@ io.on("connection", (socket: Socket) => {
                         },
                     },
                 }),
-                rtdb.ref("roomUsers/" + roomId).set({
+                rtdb.ref("gameInfo/" + roomId).set({
                     problems: [],
                     responses: {
                         [uid]: {
                             socketId: socket.id,
                             status: "lobby",
-                            response: null,
+                            answers: []
                         },
                     },
                 }),
-                rtdb.ref("publicRooms/" + roomId).set(true),
                 rtdb.ref("authUsers/" + uid).set({
                     room: roomId,
                     socketId: socket.id,
@@ -228,7 +221,7 @@ io.on("connection", (socket: Socket) => {
                         userId: uid,
                     },
                 }),
-                rtdb.ref("roomUsers/" + code + "/responses").update({
+                rtdb.ref("gameInfo/" + code + "/responses").update({
                     [uid]: {
                         socketId: socket.id,
                         status: 0,
@@ -306,9 +299,14 @@ io.on("connection", (socket: Socket) => {
             
             console.log(socket.id + " UID:" + uid + " Generated:", problems);
 
-            await rtdb.ref("roomUsers/" + roomId + "/problems").set(
+            await rtdb.ref("gameInfo/" + roomId + "/problems").set(
                 problems.map(value => {
-                    return { problem: value?.problem };
+                    let { problem, title, answerType, category } = value;
+                    return {
+                        title,
+                        problem,
+                        answerType
+                    };
                 })
             );
 
@@ -317,7 +315,7 @@ io.on("connection", (socket: Socket) => {
             /**
             setTimeout(async () => {
                 io.to(roomId).emit("end-game");
-                await rtdb.ref("roomUsers/" + roomId + "/problems").set(
+                await rtdb.ref("gameInfo/" + roomId + "/problems").set(
                     problems
                 );
             }, roomSettings.timeLimit * 60 * 1000);
