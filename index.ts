@@ -20,40 +20,76 @@ const PORT = process.env.PORT || 4000;
 
 import { app, auth, rtdb, db } from "./firebase.js";
 import { generateProblems } from "./core.js";
+import { ServerValue } from "firebase-admin/database";
 
-const exitSocketRoom = async (socketId, room)=> {
+const exitSocketRoom = async (socketId, room) => {
     try {
-        const { users } = (
-            await rtdb.ref("rooms/" + room).once("value")
-        ).val();
+        let deleteRoom = false;
+        let uid;
+        let success = true;
 
-        const {
-            [socketId]: { userId },
-        } = users;
+        let { committed, snapshot } = await rtdb
+            .ref("rooms/" + room)
+            .transaction(value => {
+                success = true;
+                deleteRoom = false;
 
-        if (!userId){
+                if (
+                    value == null ||
+                    value.users == null ||
+                    value.users[socketId] == null
+                ) {
+                    success = false;
+                    return value;
+                }
+
+                uid = value.users[socketId].userId;
+
+                // no users, delete room
+                if (Object.keys(value.users).length <= 1) {
+                    deleteRoom = true;
+                    return null;
+                }
+
+                // transfer host
+                if (value.host.socketId == socketId) {
+                    for (const socket in value.users) {
+                        if (socket == socketId) {
+                            continue;
+                        }
+
+                        value.host = {
+                            socketId: socket,
+                            userId: value.users[socket].userId,
+                        };
+                        break;
+                    }
+                }
+
+                // delete user
+                value.users[socketId] = null;
+
+                return value;
+            });
+
+        if (!success) {
             return;
         }
 
-        if (Object.keys(users).length <= 1) {
-            let deletePromise = [
-                rtdb.ref("rooms/" + room).remove(),
+        if (deleteRoom) {
+            await Promise.all([
                 rtdb.ref("gameInfo/" + room).remove(),
-                rtdb.ref("authUsers/" + userId).remove(),
+                rtdb.ref("authUsers/" + uid).remove(),
                 rtdb.ref("gameSettings/" + room).remove(),
-            ];
-
-            await Promise.all(deletePromise);
-            return;
+            ]);
+        } else {
+            await Promise.all([
+                rtdb
+                    .ref("gameInfo/" + room + "/responses/" + uid)
+                    .update({ status: "disconnect" }),
+                rtdb.ref("authUsers/" + uid).remove(),
+            ]);
         }
-
-        await Promise.all([
-            rtdb.ref("rooms/" + room + "/users/" + socketId).remove(),
-            rtdb
-                .ref("gameInfo/" + room + "/responses/" + userId)
-                .update({ status: "disconnect" }),
-            rtdb.ref("authUsers/" + userId).remove(),
-        ]);
     } catch (error) {
         console.error(error);
     }
@@ -92,8 +128,6 @@ io.on("connection", (socket: Socket) => {
                 return;
             }
 
-            console.log(socket.id + " UID:" + uid + " requests CREATE");
-
             const roomPush = rtdb.ref("rooms").push();
             const roomId = roomPush.key;
 
@@ -122,8 +156,8 @@ io.on("connection", (socket: Socket) => {
                     responses: {
                         [uid]: {
                             socketId: socket.id,
-                            status: "lobby",
-                            answers: []
+                            status: "unsubmitted",
+                            answers: [],
                         },
                     },
                 }),
@@ -164,6 +198,9 @@ io.on("connection", (socket: Socket) => {
             ]);
 
             socket.join(roomId);
+
+            console.log(socket.id + " UID:" + uid + " CREATES " + roomId);
+
             socket.emit("create-room-success", {
                 roomId,
             });
@@ -190,41 +227,56 @@ io.on("connection", (socket: Socket) => {
                 return;
             }
 
-            const requestRoom = await rtdb.ref("rooms/" + code).once("value");
+            let success = true;
 
-            if (!requestRoom.exists()) {
-                socket.emit("join-room-error", {
-                    error: "error: joining room: room does not exist",
-                    message: "The room does not exist!",
+            let { committed, snapshot } = await rtdb
+                .ref("rooms/" + code)
+                .transaction((value) => {
+                    success = true;
+
+                    if (
+                        value == null ||
+                        value.users == null ||
+                        value.maxUsers == null
+                    ) {
+                        success = false;
+                        return value;
+                    }
+
+                    if (value.maxUsers <= Object.keys(value.users).length) {
+                        success = false;
+                        return value;
+                    }
+
+                    value.users[socket.id] = {
+                        userId: uid,
+                    };
+
+                    return value;
                 });
+
+            if (!success) {
+                if (!snapshot.exists()) {
+                    socket.emit("join-room-error", {
+                        error: "error: joining room: room does not exist",
+                        message: "The room does not exist!",
+                    });
+                } else {
+                    socket.emit("join-room-error", {
+                        error: "error: joining room: room is full",
+                        message: "The room is already full!",
+                    });
+                }
                 return;
             }
 
-            if (
-                requestRoom.val().maxUsers <=
-                Object.keys(requestRoom.val().users).length
-            ) {
-                socket.emit("join-room-error", {
-                    error: "error: joining room: room is full",
-                    message: "The room is already full!",
-                });
-                return;
-            }
-
-            console.log(
-                socket.id + " UID:" + rtdbUser + " requests JOIN " + code
-            );
+            console.log(socket.id + " UID:" + uid + " JOINS " + code);
 
             await Promise.all([
-                rtdb.ref("rooms/" + code + "/users").update({
-                    [socket.id]: {
-                        userId: uid,
-                    },
-                }),
                 rtdb.ref("gameInfo/" + code + "/responses").update({
                     [uid]: {
                         socketId: socket.id,
-                        status: 0,
+                        status: "unsubmitted",
                         response: null,
                     },
                 }),
@@ -237,6 +289,7 @@ io.on("connection", (socket: Socket) => {
             socket.join(code);
             socket.emit("join-room-success", {
                 roomId: code,
+                gameStarted: snapshot.val().gameStarted,
             });
         } catch (error) {
             console.error(error);
@@ -250,9 +303,10 @@ io.on("connection", (socket: Socket) => {
             }
 
             await exitSocketRoom(socket.id, room);
+            console.log(socket.id + " DISCONNECTS from " + room);
         }
     });
-    
+
     socket.on("exit-room", async () => {
         for (const room of socket.rooms) {
             if (room === socket.id) {
@@ -261,7 +315,8 @@ io.on("connection", (socket: Socket) => {
 
             await exitSocketRoom(socket.id, room);
 
-            socket.emit("exit-room-success");
+            socket.emit("exit-room-success", { roomId: room });
+            console.log(socket.id + " EXITS " + room);
         }
     });
 
@@ -269,7 +324,7 @@ io.on("connection", (socket: Socket) => {
         const decoded = await auth.verifyIdToken(idToken);
         const { uid } = decoded;
         const { roomId } = data;
-        
+
         try {
             const gameSettings = (
                 await rtdb.ref("gameSettings/" + roomId).once("value")
@@ -279,39 +334,47 @@ io.on("connection", (socket: Socket) => {
                 await rtdb.ref("rooms/" + roomId).once("value")
             ).val();
 
-            if (gameSettings == null || roomSettings == null){
+            if (gameSettings == null || roomSettings == null) {
                 return;
             }
 
-            if (roomSettings.host.userId != uid){
-                socket.emit("start-room-error", {
+            if (roomSettings.host.userId != uid) {
+                socket.emit("start-game-error", {
                     error: "error: invalid permissions",
                     message: "Only the owner can start the game!",
                 });
                 return;
             }
-            
+
             console.log(socket.id + " UID:" + uid + " requests START");
 
             await rtdb.ref("rooms/" + roomId + "/gameStarted").set(true);
             io.to(roomId).emit("starting-game");
             const problems = await generateProblems(gameSettings);
-            
-            console.log(socket.id + " UID:" + uid + " Generated:", problems);
 
-            await rtdb.ref("gameInfo/" + roomId + "/problems").set(
-                problems.map(value => {
+            console.log(
+                socket.id + " UID:" + uid + " GENERATES:",
+                problems.map(({ title }) => {
+                    return title;
+                }),
+                "in ROOMID:" + roomId
+            );
+
+            await rtdb.ref("gameInfo/" + roomId + "/gameDetails").update({
+                startTime: ServerValue.TIMESTAMP,
+                timeLimit: roomSettings.timeLimit * 60 * 1000,
+                problems: problems.map((value) => {
                     let { problem, title, answerType, category } = value;
                     return {
                         title,
                         problem,
-                        answerType
+                        answerType,
                     };
-                })
-            );
+                }),
+            });
 
             io.to(roomId).emit("started-game");
-            
+
             /**
             setTimeout(async () => {
                 io.to(roomId).emit("end-game");
