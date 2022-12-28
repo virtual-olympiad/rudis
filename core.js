@@ -1,5 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
-import { parseWikiProblem, parseKatex } from "vo-core";
+import { parseWikiProblem, parseKatex, estimateDifficulty, parseTitle } from "vo-core";
 import problemCache from "./problemPages.json" assert { type: "json" };
 function randomArray(array) {
     for (var i = array.length - 1; i > 0; i--) {
@@ -11,7 +11,7 @@ function randomArray(array) {
 }
 const generateProblems = async ({ contestSelection, contestDetails }) => {
     let generatedProblems = [];
-    let problemAnswerTypes = [];
+    let problemDetails = [];
     Object.entries(contestSelection).forEach(([contest, selected], i) => {
         if (!selected) {
             return;
@@ -21,7 +21,10 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
         randomArray(contestProblems);
         generatedProblems.push(contestProblems.slice(0, details.problemCount));
         for (let i = 0; i < details.problemCount; ++i) {
-            problemAnswerTypes.push(contest == "aime" ? "aime" : "amc");
+            problemDetails.push({
+                contest,
+                answerType: contest == "aime" ? "aime" : "amc"
+            });
         }
     });
     generatedProblems = generatedProblems.flat();
@@ -31,9 +34,13 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
             console.error("ERROR: " + generatedProblems[i] + " failed to resolve");
             return null;
         }
+        const { answerType, contest } = problemDetails[i];
+        const { year, contestName, problemIndex } = parseTitle(contest, generatedProblems[i]);
         return {
             ...value,
-            answerType: problemAnswerTypes[i],
+            difficulty: estimateDifficulty(contest, year, problemIndex),
+            problemTitle: `${year} ${contestName} #${problemIndex}`,
+            answerType,
             problem: DOMPurify.sanitize(parseKatex(value.problem), {
                 FORBID_TAGS: ["a"],
             }),

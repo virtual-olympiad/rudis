@@ -1,5 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
-import { fetchWikiPage, parseWikiProblem, parseKatex } from "vo-core";
+import { fetchWikiPage, parseWikiProblem, parseKatex, estimateDifficulty, parseTitle } from "vo-core";
 import problemCache from "./problemPages.json" assert { type: "json" };
 
 function randomArray(array) {
@@ -13,7 +13,7 @@ function randomArray(array) {
 
 const generateProblems = async ({ contestSelection, contestDetails }) => {
     let generatedProblems = [];
-    let problemAnswerTypes = [];
+    let problemDetails = [];
 
     Object.entries(contestSelection).forEach(([contest, selected], i) => {
         if (!selected) {
@@ -26,7 +26,10 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
         generatedProblems.push(contestProblems.slice(0, details.problemCount));
 
         for (let i = 0; i < details.problemCount; ++i){
-            problemAnswerTypes.push(contest == "aime" ? "aime":"amc")
+            problemDetails.push({
+                contest,
+                answerType: contest == "aime" ? "aime":"amc"
+            })
         }
     });
 
@@ -44,9 +47,14 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
             return null;
         }
 
+        const { answerType, contest } = problemDetails[i];
+        const { year, contestName, problemIndex } = parseTitle(contest, generatedProblems[i]);
+
         return {
             ...value,
-            answerType: problemAnswerTypes[i],
+            difficulty: estimateDifficulty(contest, year, problemIndex),
+            problemTitle: `${year} ${contestName} #${problemIndex}`,
+            answerType,
             problem: DOMPurify.sanitize(parseKatex(value.problem), {
                 FORBID_TAGS: ["a"],
             }),

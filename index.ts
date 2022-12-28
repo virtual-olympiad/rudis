@@ -354,19 +354,23 @@ io.on("connection", (socket: Socket) => {
 
             console.log(
                 socket.id + " UID:" + uid + " GENERATES:",
-                problems.map(({ title }) => {
-                    return title;
+                problems.map(({ pagetitle }) => {
+                    return pagetitle;
                 }),
                 "in ROOMID:" + roomId
             );
+
+            problems.sort((a, b) => {
+                return a.difficulty - b.difficulty;
+            });
 
             await rtdb.ref("gameInfo/" + roomId + "/gameDetails").update({
                 startTime: ServerValue.TIMESTAMP,
                 timeLimit: roomSettings.timeLimit * 60 * 1000,
                 problems: problems.map((value) => {
-                    let { problem, title, answerType, category } = value;
+                    let { problem, pageTitle, problemTitle, link, difficulty, answerType, category } = value;
+
                     return {
-                        title,
                         problem,
                         answerType,
                     };
