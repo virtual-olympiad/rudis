@@ -1,5 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
-import { parseWikiProblem, parseKatex, estimateDifficulty, parseTitle } from "vo-core";
+import { parseWikiProblem, renderKatexString, estimateDifficulty, parseTitle } from "vo-core";
 import problemCache from "./problemPages.json" assert { type: "json" };
 function randomArray(array) {
     for (var i = array.length - 1; i > 0; i--) {
@@ -41,7 +41,7 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
             difficulty: estimateDifficulty(contest, year, problemIndex),
             problemTitle: `${year} ${contestName} #${problemIndex}`,
             answerType,
-            problem: DOMPurify.sanitize(parseKatex(value.problem), {
+            problem: DOMPurify.sanitize(renderKatexString(value.problem), {
                 FORBID_TAGS: ["a"],
             }),
         };
