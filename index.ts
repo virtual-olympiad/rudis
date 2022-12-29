@@ -354,8 +354,8 @@ io.on("connection", (socket: Socket) => {
 
             console.log(
                 socket.id + " UID:" + uid + " GENERATES:",
-                problems.map(({ pagetitle }) => {
-                    return pagetitle;
+                problems.map(({ pageTitle }) => {
+                    return pageTitle;
                 }),
                 "in ROOMID:" + roomId
             );
