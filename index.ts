@@ -78,14 +78,14 @@ const exitSocketRoom = async (socketId, room) => {
 
         if (deleteRoom) {
             await Promise.all([
-                rtdb.ref("gameInfo/" + room).remove(),
+                rtdb.ref("gameData/" + room).remove(),
                 rtdb.ref("authUsers/" + uid).remove(),
                 rtdb.ref("gameSettings/" + room).remove(),
             ]);
         } else {
             await Promise.all([
                 rtdb
-                    .ref("gameInfo/" + room + "/responses/" + uid)
+                    .ref("gameData/" + room + "/responses/" + uid)
                     .update({ status: "disconnect" }),
                 rtdb.ref("authUsers/" + uid).remove(),
             ]);
@@ -151,7 +151,7 @@ io.on("connection", (socket: Socket) => {
                         },
                     },
                 }),
-                rtdb.ref("gameInfo/" + roomId).set({
+                rtdb.ref("gameData/" + roomId).set({
                     problems: [],
                     responses: {
                         [uid]: {
@@ -273,7 +273,7 @@ io.on("connection", (socket: Socket) => {
             console.log(socket.id + " UID:" + uid + " JOINS " + code);
 
             await Promise.all([
-                rtdb.ref("gameInfo/" + code + "/responses").update({
+                rtdb.ref("gameData/" + code + "/responses").update({
                     [uid]: {
                         socketId: socket.id,
                         status: "unsubmitted",
@@ -364,30 +364,29 @@ io.on("connection", (socket: Socket) => {
                 return a.difficulty - b.difficulty;
             });
 
-            await rtdb.ref("gameInfo/" + roomId).set({
-                results: {
-                    answers: problems
-                },
-                data: {
-                    startTime: ServerValue.TIMESTAMP,
-                    timeLimit: roomSettings.timeLimit * 60 * 1000,
-                    problems: problems.map((value) => {
-                        let {
-                            problem,
-                            pageTitle,
-                            problemTitle,
-                            link,
-                            difficulty,
-                            answerType,
-                            category,
-                        } = value;
+            await rtdb.ref("gameData/" + roomId + '/results').set({
+                answers: problems
+            });
 
-                        return {
-                            problem,
-                            answerType,
-                        };
-                    }),
-                },
+            await rtdb.ref("gameData/" + roomId + '/data').set({
+                startTime: ServerValue.TIMESTAMP,
+                timeLimit: roomSettings.timeLimit * 60 * 1000,
+                problems: problems.map((value) => {
+                    let {
+                        problem,
+                        pageTitle,
+                        problemTitle,
+                        link,
+                        difficulty,
+                        answerType,
+                        category,
+                    } = value;
+
+                    return {
+                        problem,
+                        answerType,
+                    };
+                }),
             });
 
             io.to(roomId).emit("started-game");
@@ -395,7 +394,7 @@ io.on("connection", (socket: Socket) => {
             /**
             setTimeout(async () => {
                 io.to(roomId).emit("end-game");
-                await rtdb.ref("gameInfo/" + roomId + "/problems").set(
+                await rtdb.ref("gameData/" + roomId + "/problems").set(
                     problems
                 );
             }, roomSettings.timeLimit * 60 * 1000);
