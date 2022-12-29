@@ -9,14 +9,14 @@ function randomArray(array) {
         array[j] = temp;
     }
 }
-const generateProblems = async ({ contestSelection, contestDetails }) => {
+const generateProblems = async ({ contestSelection, contestData }) => {
     let generatedProblems = [];
     let problemDetails = [];
     Object.entries(contestSelection).forEach(([contest, selected], i) => {
         if (!selected) {
             return;
         }
-        const details = contestDetails[contest];
+        const details = contestData[contest];
         let contestProblems = problemCache[contest].slice(0);
         randomArray(contestProblems);
         generatedProblems.push(contestProblems.slice(0, details.problemCount));

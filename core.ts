@@ -11,7 +11,7 @@ function randomArray(array) {
     }
 }
 
-const generateProblems = async ({ contestSelection, contestDetails }) => {
+const generateProblems = async ({ contestSelection, contestData }) => {
     let generatedProblems = [];
     let problemDetails = [];
 
@@ -19,7 +19,7 @@ const generateProblems = async ({ contestSelection, contestDetails }) => {
         if (!selected) {
             return;
         }
-        const details = contestDetails[contest];
+        const details = contestData[contest];
         let contestProblems = problemCache[contest].slice(0);
 
         randomArray(contestProblems);

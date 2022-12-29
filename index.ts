@@ -30,7 +30,7 @@ const exitSocketRoom = async (socketId, room) => {
 
         let { committed, snapshot } = await rtdb
             .ref("rooms/" + room)
-            .transaction(value => {
+            .transaction((value) => {
                 success = true;
                 deleteRoom = false;
 
@@ -172,7 +172,7 @@ io.on("connection", (socket: Socket) => {
                         amc12: true,
                         aime: true,
                     },
-                    contestDetails: {
+                    contestData: {
                         amc8: {
                             problemCount: 1,
                             correctScore: 6,
@@ -364,17 +364,30 @@ io.on("connection", (socket: Socket) => {
                 return a.difficulty - b.difficulty;
             });
 
-            await rtdb.ref("gameInfo/" + roomId + "/gameDetails").update({
-                startTime: ServerValue.TIMESTAMP,
-                timeLimit: roomSettings.timeLimit * 60 * 1000,
-                problems: problems.map((value) => {
-                    let { problem, pageTitle, problemTitle, link, difficulty, answerType, category } = value;
+            await rtdb.ref("gameInfo/" + roomId).set({
+                results: {
+                    answers: problems
+                },
+                data: {
+                    startTime: ServerValue.TIMESTAMP,
+                    timeLimit: roomSettings.timeLimit * 60 * 1000,
+                    problems: problems.map((value) => {
+                        let {
+                            problem,
+                            pageTitle,
+                            problemTitle,
+                            link,
+                            difficulty,
+                            answerType,
+                            category,
+                        } = value;
 
-                    return {
-                        problem,
-                        answerType,
-                    };
-                }),
+                        return {
+                            problem,
+                            answerType,
+                        };
+                    }),
+                },
             });
 
             io.to(roomId).emit("started-game");
