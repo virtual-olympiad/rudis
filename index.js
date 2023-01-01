@@ -13,7 +13,6 @@ const io = new Server(httpServer, {
 const PORT = process.env.PORT || 4000;
 import { auth, rtdb } from "./firebase.js";
 import { generateProblems } from "./core.js";
-import { ServerValue } from "firebase-admin/database";
 const exitSocketRoom = async (socketId, room) => {
     try {
         let deleteRoom = false;
@@ -76,6 +75,66 @@ const exitSocketRoom = async (socketId, room) => {
         console.error(error);
     }
 };
+const compileResults = async (roomId, endReason) => {
+    try {
+        const contestData = (await rtdb.ref("gameSettings/" + roomId + '/contestData').once("value")).val();
+        if (!contestData) {
+            return;
+        }
+        let success = false;
+        const { committed, snapshot } = await rtdb.ref('gameData/' + roomId).transaction((value) => {
+            if (!value || !value?.results?.answers || !value?.responses) {
+                return value;
+            }
+            let standings = [];
+            let { results: { answers: solutions }, responses } = value;
+            for (const userId in responses) {
+                const { status, answers } = responses[userId];
+                if (status == 'disconnect') {
+                    continue;
+                }
+                value.responses[userId].status = 'submitted';
+                let userStanding = {
+                    userId,
+                    correct: 0,
+                    blank: 0,
+                    score: 0
+                };
+                solutions.forEach((solution, i) => {
+                    const response = answers[i];
+                    const { blankScore, correctScore } = contestData[solution.contest];
+                    if (response !== 0 && !response) {
+                        // unanswered
+                        ++userStanding.blank;
+                        userStanding.score += blankScore;
+                        return;
+                    }
+                    if ((Array.isArray(solution.answer) && solution.answer.includes(response)) || solution.answer === response) {
+                        ++userStanding.correct;
+                        userStanding.score += correctScore;
+                        return;
+                    }
+                });
+                standings.push(userStanding);
+            }
+            // Descending score order
+            standings.sort((a, b) => {
+                b.score - a.score;
+            });
+            value.results.standings = standings;
+            value.results.endReason = endReason;
+            success = true;
+            return value;
+        });
+        if (success) {
+            await rtdb.ref('rooms/' + roomId + '/gameState').set('lobby');
+        }
+    }
+    catch (error) {
+        console.error(error);
+    }
+};
+const endGameTimeout = {};
 io.on("connection", (socket) => {
     console.log(socket.id + " CONNECTS");
     socket.on("create-room", async ({ idToken, data }) => {
@@ -108,7 +167,7 @@ io.on("connection", (socket) => {
                     teamsEnabled: false,
                     maxUsers: 8,
                     timeLimit: 60,
-                    gameStarted: false,
+                    gameState: 'lobby',
                     host: {
                         socketId: socket.id,
                         userId: uid,
@@ -228,7 +287,6 @@ io.on("connection", (socket) => {
                     [uid]: {
                         socketId: socket.id,
                         status: "unsubmitted",
-                        response: null,
                     },
                 }),
                 rtdb.ref("authUsers/" + uid).set({
@@ -239,7 +297,7 @@ io.on("connection", (socket) => {
             socket.join(code);
             socket.emit("join-room-success", {
                 roomId: code,
-                gameStarted: snapshot.val().gameStarted,
+                gameState: snapshot.val().gameState,
             });
         }
         catch (error) {
@@ -283,7 +341,7 @@ io.on("connection", (socket) => {
                 return;
             }
             console.log(socket.id + " UID:" + uid + " requests START");
-            await rtdb.ref("rooms/" + roomId + "/gameStarted").set(true);
+            await rtdb.ref("rooms/" + roomId + "/gameState").set('game');
             io.to(roomId).emit("starting-game");
             const problems = await generateProblems(gameSettings);
             console.log(socket.id + " UID:" + uid + " GENERATES:", problems.map(({ pageTitle }) => {
@@ -296,7 +354,7 @@ io.on("connection", (socket) => {
                 answers: problems
             });
             await rtdb.ref("gameData/" + roomId + '/data').set({
-                startTime: ServerValue.TIMESTAMP,
+                startTime: Date.now(),
                 timeLimit: roomSettings.timeLimit * 60 * 1000,
                 problems: problems.map((value) => {
                     let { problem, pageTitle, problemTitle, link, difficulty, answerType, category, } = value;
@@ -307,14 +365,64 @@ io.on("connection", (socket) => {
                 }),
             });
             io.to(roomId).emit("started-game");
-            /**
-            setTimeout(async () => {
-                io.to(roomId).emit("end-game");
-                await rtdb.ref("gameData/" + roomId + "/problems").set(
-                    problems
-                );
+            endGameTimeout[roomId] = setTimeout(async () => {
+                let roomExists = true;
+                await rtdb.ref("rooms/" + roomId).transaction((value) => {
+                    if (!value) {
+                        roomExists = false;
+                        return value;
+                    }
+                    value.gameState = 'compiling-results';
+                    return value;
+                });
+                if (roomExists) {
+                    await compileResults(roomId, 'end-time');
+                    io.to(roomId).emit("results-compiled");
+                }
             }, roomSettings.timeLimit * 60 * 1000);
-            */
+        }
+        catch (error) {
+            console.error(error);
+        }
+    });
+    socket.on("submit-answer", async ({ idToken, data }) => {
+        const decoded = await auth.verifyIdToken(idToken);
+        const { uid } = decoded;
+        const { roomId } = data;
+        try {
+            let hasSubmitted = false;
+            let { committed, snapshot } = await rtdb.ref('gameData/' + roomId + '/responses/' + uid).transaction((value) => {
+                if (!value || value?.status != 'unsubmitted') {
+                    return value;
+                }
+                value.status = 'submitted';
+                hasSubmitted = true;
+                return value;
+            });
+            if (hasSubmitted) {
+                // check if everyone has submitted, if so, compile results
+                const snap = await rtdb.ref("gameData/" + roomId + '/responses').once("value");
+                if (!snap.exists()) {
+                    return;
+                }
+                const responses = snap.val();
+                for (const user in responses) {
+                    let { status } = responses[user];
+                    if (status == 'unsubmitted') {
+                        return;
+                    }
+                }
+                clearTimeout(endGameTimeout[roomId]);
+                await rtdb.ref("rooms/" + roomId).transaction((value) => {
+                    if (!value) {
+                        return value;
+                    }
+                    value.gameState = 'compiling-results';
+                    return value;
+                });
+                await compileResults(roomId, 'end-responses');
+                io.to(roomId).emit("results-compiled");
+            }
         }
         catch (error) {
             console.error(error);

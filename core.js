@@ -2,9 +2,9 @@ import DOMPurify from "isomorphic-dompurify";
 import { parseWikiProblem, renderKatexString, estimateDifficulty, parseTitle, fetchProblemAnswer } from "vo-core";
 import problemCache from "./problemPages.json" assert { type: "json" };
 function randomArray(array) {
-    for (var i = array.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var temp = array[i];
+    for (let i = array.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i + 1));
+        let temp = array[i];
         array[i] = array[j];
         array[j] = temp;
     }
