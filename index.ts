@@ -468,6 +468,7 @@ io.on("connection", (socket: Socket) => {
             endGameTimeout[roomId] = setTimeout(async () => {
                 let roomExists = true;
                 await rtdb.ref("rooms/" + roomId).transaction((value) => {
+                    roomExists = true;
                     if (!value){
                         roomExists = false;
                         return value;
@@ -481,7 +482,7 @@ io.on("connection", (socket: Socket) => {
                     await compileResults(roomId, 'end-time');
                     io.to(roomId).emit("results-compiled");
                 }                
-            }, roomSettings.timeLimit * 60 * 1000);
+            }, roomSettings.timeLimit * 60000);
         } catch (error) {
             console.error(error);
         }

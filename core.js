@@ -40,9 +40,20 @@ const generateProblems = async ({ contestSelection, contestData }) => {
             console.error("ERROR: " + problem + " ANSWER failed to resolve");
             return null;
         }
+        let ans = answer.value;
+        if (answerType == "aime") {
+            if (Array.isArray(answer.value)) {
+                ans = answer.value.map(value => {
+                    return parseInt(value);
+                });
+            }
+            else {
+                ans = parseInt(answer.value);
+            }
+        }
         return {
             ...wikiProblem.value,
-            answer: answer.value,
+            answer: ans,
             difficulty: estimateDifficulty(contest, year, problemIndex),
             metadata: {
                 year,
