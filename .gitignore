@@ -1,6 +1,7 @@
 #
 app.yaml
 .gcloudignore
+Procfile
 
 # Logs
 logs
