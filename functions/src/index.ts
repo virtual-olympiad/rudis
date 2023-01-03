@@ -33,5 +33,5 @@ functions.auth.user().onCreate(async user => {
 export const authOnDelete =
 functions.auth.user().onDelete(async user => {
     console.log(`Deleting document for user ${user.uid}`);
-    await firestore.collection('users').doc(user.uid).delete();
+    await firestore.recursiveDelete(firestore.collection('users').doc(user.uid));
 });

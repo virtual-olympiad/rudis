@@ -158,11 +158,15 @@ io.on("connection", (socket) => {
             decoded = await auth.verifyIdToken(idToken);
         }
         catch (error) {
+            socket.emit("create-room-error", {
+                error: "error: room creation: not logged in",
+                message: "You must log in to create or join rooms!",
+            });
             return;
         }
         const { uid } = decoded;
         const { roomName: name, roomDescription: description, roomMode: mode, roomPublic, } = data;
-        if (uid == null) {
+        if (!uid) {
             socket.emit("create-room-error", {
                 error: "error: room creation: not logged in",
                 message: "You must log in to create or join rooms!",
@@ -260,6 +264,10 @@ io.on("connection", (socket) => {
             decoded = await auth.verifyIdToken(idToken);
         }
         catch (error) {
+            socket.emit("join-room-error", {
+                error: "error: joining room: not logged in",
+                message: "You must log in to create or join rooms!",
+            });
             return;
         }
         const { uid } = decoded;
