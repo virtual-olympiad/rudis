@@ -318,11 +318,9 @@ io.on("connection", (socket) => {
             }
             console.log(socket.id + " UID:" + uid + " JOINS " + code);
             await Promise.all([
-                rtdb.ref("gameData/" + code + "/responses").update({
-                    [uid]: {
-                        socketId: socket.id,
-                        status: "unsubmitted",
-                    },
+                rtdb.ref("gameData/" + code + "/responses/" + uid).update({
+                    socketId: socket.id,
+                    status: "unsubmitted",
                 }),
                 rtdb.ref("authUsers/" + uid).set({
                     room: code,
