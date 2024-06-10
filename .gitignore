@@ -1,3 +1,6 @@
+# Typescript Build
+/dist
+
 #
 app.yaml
 .gcloudignore
