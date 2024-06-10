@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 dotenv.config();
 
-import { fetchWikiPage, parseWikiProblem, parseKatex } from "vo-core";
+// import { fetchWikiPage, parseWikiProblem, parseKatexString } from "aesthete";
 
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
@@ -22,7 +22,7 @@ import { app, auth, rtdb, db } from "./firebase.js";
 import { generateProblems } from "./core.js";
 import { ServerValue } from "firebase-admin/database";
 
-const exitSocketRoom = async (socketId, room) => {
+const exitSocketRoom = async (socketId: string, room: string) => {
     try {
         let deleteRoom = false;
         let uid;
@@ -155,7 +155,7 @@ const compileResults = async (roomId: string, endReason: string) => {
                             value.data.startTime,
                     };
 
-                    solutions.forEach((solution, i) => {
+                    solutions.forEach((solution: any, i: number) => {
                         const response = answers[i];
                         const { blankScore, correctScore } =
                             contestData[solution.contest];
@@ -211,8 +211,8 @@ const compileResults = async (roomId: string, endReason: string) => {
     }
 };
 
-let endGameTimeout = {};
-let authTransacting = {};
+let endGameTimeout: { [key: string]: any } = {};
+let authTransacting: { [key: string]: any } = {};
 
 io.on("connection", (socket: Socket) => {
     console.log(socket.id + " CONNECTS");
@@ -245,7 +245,7 @@ io.on("connection", (socket: Socket) => {
         }
 
         try {
-            if (authTransacting[uid]){
+            if (authTransacting[uid] as any){
                 return;
             }
 
@@ -332,7 +332,7 @@ io.on("connection", (socket: Socket) => {
                 }),
             ]);
 
-            socket.join(roomId);
+            socket.join(roomId as string);
 
             await roomPush.update({
                 gameState: "lobby",

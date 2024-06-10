@@ -1,8 +1,8 @@
 import DOMPurify from "isomorphic-dompurify";
-import { fetchWikiPage, parseWikiProblem, renderKatexString, estimateDifficulty, parseTitle, fetchProblemAnswer } from "vo-core";
+import { fetchWikiPage, parseWikiProblem, renderKatexString, estimateDifficulty, parseTitle, fetchProblemAnswer } from "aesthete";
 import problemCache from "./problemPages.json" assert { type: "json" };
 
-function randomArray(array) {
+function randomArray(array: any) {
     for (let i = array.length - 1; i > 0; i--) {
         let j = Math.floor(Math.random() * (i + 1));
         let temp = array[i];
@@ -11,16 +11,19 @@ function randomArray(array) {
     }
 }
 
-const generateProblems = async ({ contestSelection, contestData }) => {
-    let generatedProblems = [];
-    let problemDetails = [];
+const generateProblems = async ({ contestSelection, contestData }: { contestSelection: any; contestData: any; }) => {
+    let generatedProblems: any = [];
+    let problemDetails: any = [];
+
+    contestSelection as any;
+    contestData as any;
 
     Object.entries(contestSelection).forEach(([contest, selected], i) => {
         if (!selected) {
             return;
         }
         const details = contestData[contest];
-        let contestProblems = problemCache[contest].slice(0);
+        let contestProblems = problemCache[contest as 'amc8' | 'amc10' | 'amc12' | 'aime'].slice(0);
 
         randomArray(contestProblems);
         generatedProblems.push(contestProblems.slice(0, details.problemCount));
@@ -35,11 +38,11 @@ const generateProblems = async ({ contestSelection, contestData }) => {
 
     generatedProblems = generatedProblems.flat();
 
-    const fetchProblem = async (problem, i) => {
+    const fetchProblem = async (problem: string, i: number) => {
         const { answerType, contest } = problemDetails[i];
-        const { year, contestName, problemIndex } = parseTitle(contest, problem);
+        const { year, contestName, problemIndex } = parseTitle(contest, problem) as { year: string; contestName: string; problemIndex: string };
 
-        const [wikiProblem, answer] = await Promise.allSettled([parseWikiProblem(problem), fetchProblemAnswer(year, contestName, problemIndex)]);
+        const [wikiProblem, answer] = await Promise.allSettled([parseWikiProblem(problem), fetchProblemAnswer(Number(year), contestName, Number(problemIndex))]);
 
         if (wikiProblem?.status != "fulfilled" || !wikiProblem?.value?.problem) {
             console.error(
@@ -70,7 +73,7 @@ const generateProblems = async ({ contestSelection, contestData }) => {
         return {
             ...wikiProblem.value,
             answer: ans,
-            difficulty: estimateDifficulty(contest, year, problemIndex),
+            difficulty: estimateDifficulty(contest, Number(year), Number(problemIndex)),
             metadata: {
                 year,
                 contestName,
@@ -82,7 +85,7 @@ const generateProblems = async ({ contestSelection, contestData }) => {
     };
 
     const problems = await Promise.allSettled(
-        generatedProblems.map((problem, i) => {
+        generatedProblems.map((problem: string, i: number) => {
             return fetchProblem(problem, i);
         })
     );
