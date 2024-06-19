@@ -24,13 +24,19 @@
   },
   "homepage": "https://github.com/virtual-olympiad/rudis#readme",
   "dependencies": {
+    "@supabase/supabase-js": "^2.43.5",
     "aesthete": "^1.1.0",
-    "dotenv": "^16.0.1",
-    "express": "^4.18.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "firebase-admin": "^12.1.1",
-    "isomorphic-dompurify": "^0.24.0",
-    "socket.io": "^4.5.1",
-    "typescript": "^4.7.4",
-    "vo-core": "^1.0.0"
+    "isomorphic-dompurify": "^2.12.0",
+    "socket.io": "^4.7.5",
+    "typescript": "^5.4.5",
+    "vo-core": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.0.8",
+    "utf-8-validate": "^6.0.4"
   }
 }
