@@ -20,13 +20,14 @@ const io = new Server(httpServer, {
 const PORT = process.env.PORT || 4000;
 
 import { authorize } from './lib/utils.js';
-// import { createRoom } from './core/core.js';
+import { createRoom } from './core/core.js';
 
 let endGameTimeout: { [key: string]: any } = {};
 let authTransacting: { [key: string]: any } = {};
 
 io.on("connection", (socket: Socket) => {
     console.log(socket.id + " CONNECTS");
+    console.log("Concurrent connections:", io.engine.clientsCount);
 
     socket.on("create-room", async ({ token, data }) => {
         const user = await authorize(token);
@@ -38,7 +39,7 @@ io.on("connection", (socket: Socket) => {
             return;
         }
 
-        // createRoom(socket, user, data);
+        await createRoom(socket, user, data);
     });
 });
 
