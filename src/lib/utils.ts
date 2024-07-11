@@ -22,7 +22,11 @@ async function getProfile(id: string){
     return profile;
 }
 
-async function emitError(socket: Socket, error: string, message: string){
+async function emitError(socket: Socket, error: string, message: string, rawError?: any){
+    if (error == 'supabaseError'){
+        console.error('supabaseError:', rawError ?? "-");
+    }
+
     socket.emit("error", {
         error, message
     });

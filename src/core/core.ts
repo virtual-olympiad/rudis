@@ -13,6 +13,10 @@ const zCreateRoomData = z.object({
     isPrivate: z.boolean(),
 });
 
+const zJoinRoomData = z.object({
+    code: z.string().uuid()
+});
+
 async function createRoom(socket: Socket, user: User, data: z.infer<typeof zCreateRoomData>) {
     const { data: userRoomData } = await supabase.from('arena_users_rooms').select('room_code').eq('user_id', user.id).limit(1).single();
 
@@ -48,7 +52,7 @@ async function createRoom(socket: Socket, user: User, data: z.infer<typeof zCrea
     });
 
     if (createRoomDataError){
-        return emitError(socket, 'supabaseError', 'Error creating room data.');
+        return emitError(socket, 'supabaseError', 'Error creating room data.', createRoomDataError);
     }
 
     const { error: insertLinkError } = await supabase.from('arena_users_rooms').insert({
@@ -57,14 +61,64 @@ async function createRoom(socket: Socket, user: User, data: z.infer<typeof zCrea
     });
 
     if (insertLinkError){
-        return emitError(socket, 'supabaseError', 'Error adding User-Room link.');
+        return emitError(socket, 'supabaseError', 'Error adding User-Room link.', insertLinkError);
     }
 
-    socket.emit('create-room:success', {
-        code: roomData.code
-    });
+    socket.emit('create-room:success');
     
     return true;
 };
 
-export { createRoom };
+async function joinRoom(socket: Socket, user: User, data: z.infer<typeof zJoinRoomData>) {
+    const { data: userRoomData } = await supabase.from('arena_users_rooms').select('room_code').eq('user_id', user.id).limit(1).single();
+
+    if (userRoomData?.room_code){
+        return emitError(socket, 'coreError', 'Cannot join room, user is already in a room.');
+    }
+
+    try {
+        zJoinRoomData.parse(data);
+    } catch (e){
+        return emitError(socket, 'inputError', 'Invalid input data type for room joining.');
+    }
+
+    const { code } = data;
+
+    const { data: userJoinRoomData } = await supabase.from('arena_rooms').select(`
+        players,
+        max_players
+    `).eq('code', code).limit(1).single();
+
+    if (!userJoinRoomData?.players?.length || !userJoinRoomData?.max_players){
+        return emitError(socket, 'coreError', 'Invalid room code.');
+    }
+
+    if (userJoinRoomData.players.length >= userJoinRoomData.max_players){
+        return emitError(socket, 'coreError', 'Cannot join room, room is full.');
+    }
+
+    // TODO: Atomize with remote call to database transaction function
+    const { error: joinRoomError } = await supabase.rpc('add_player', {
+        room_code: code,
+        player: user.id
+    });
+    
+    if (joinRoomError){
+        return emitError(socket, 'supabaseError', 'Error joining room.', joinRoomError);
+    }
+
+    const { error: insertLinkError } = await supabase.from('arena_users_rooms').insert({
+        user_id: user.id,
+        room_code: code,
+    });
+
+    if (insertLinkError){
+        return emitError(socket, 'supabaseError', 'Error adding User-Room link.', insertLinkError);
+    }
+
+    socket.emit('join-room:success');
+    
+    return true;
+};
+
+export { createRoom, joinRoom };
