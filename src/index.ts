@@ -20,7 +20,7 @@ const io = new Server(httpServer, {
 const PORT = process.env.PORT || 4000;
 
 import { authorize } from './lib/utils.js';
-import { createRoom, joinRoom } from './core/core.js';
+import { createRoom, editSettingsRoom, editSettingsGame, editSettingsProblemset, joinRoom } from './core/core.js';
 
 let endGameTimeout: { [key: string]: any } = {};
 let authTransacting: { [key: string]: any } = {};
@@ -28,9 +28,23 @@ let authTransacting: { [key: string]: any } = {};
 io.on("connection", (socket: Socket) => {
     console.log(socket.id + " CONNECTS");
     console.log("Concurrent connections:", io.engine.clientsCount);
-
+    
     io.emit('player-count:update', {
         value: io.engine.clientsCount
+    });
+
+    socket.on("player-count", () => {
+        socket.emit('player-count:update', {
+            value: io.engine.clientsCount
+        });
+    });
+
+    socket.on("disconnect", () => {
+        console.log(socket.id + " DISCONNECTS");
+        console.log("Concurrent connections:", io.engine.clientsCount);
+        io.emit('player-count:update', {
+            value: io.engine.clientsCount
+        });
     });
 
     socket.on("create-room", async ({ token, data }) => {
@@ -57,6 +71,45 @@ io.on("connection", (socket: Socket) => {
         }
 
         await joinRoom(socket, user, data);
+    });
+
+    socket.on("edit-settings-room", async ({ token, data }) => {
+        const user = await authorize(token);
+        if (!user){
+            socket.emit("error", {
+                error: 'authError',
+                message: 'Invalid user authentication.'
+            });
+            return;
+        }
+
+        await editSettingsRoom(socket, user, data);
+    });
+
+    socket.on("edit-settings-game", async ({ token, data }) => {
+        const user = await authorize(token);
+        if (!user){
+            socket.emit("error", {
+                error: 'authError',
+                message: 'Invalid user authentication.'
+            });
+            return;
+        }
+
+        await editSettingsGame(socket, user, data);
+    });
+
+    socket.on("edit-settings-problemset", async ({ token, data }) => {
+        const user = await authorize(token);
+        if (!user){
+            socket.emit("error", {
+                error: 'authError',
+                message: 'Invalid user authentication.'
+            });
+            return;
+        }
+
+        await editSettingsProblemset(socket, user, data);
     });
 });
 

@@ -17,6 +17,7 @@ const zJoinRoomData = z.object({
     code: z.string().uuid()
 });
 
+// TODO: Atomize everything
 async function createRoom(socket: Socket, user: User, data: z.infer<typeof zCreateRoomData>) {
     const { data: userRoomData } = await supabase.from('arena_users_rooms').select('room_code').eq('user_id', user.id).limit(1).single();
 
@@ -32,7 +33,6 @@ async function createRoom(socket: Socket, user: User, data: z.infer<typeof zCrea
 
     const { title, description, mode, isPrivate } = data;
 
-    // TODO: Atomize with remote call to database transaction function
     const { data: roomData, error: createRoomError } = await supabase.from('arena_rooms').insert({
         title,
         description,
@@ -97,7 +97,6 @@ async function joinRoom(socket: Socket, user: User, data: z.infer<typeof zJoinRo
         return emitError(socket, 'coreError', 'Cannot join room, room is full.');
     }
 
-    // TODO: Atomize with remote call to database transaction function
     const { error: joinRoomError } = await supabase.rpc('add_player', {
         room_code: code,
         player: user.id
@@ -121,4 +120,161 @@ async function joinRoom(socket: Socket, user: User, data: z.infer<typeof zJoinRo
     return true;
 };
 
-export { createRoom, joinRoom };
+const zEditRoomData = z.object({
+    title: z.string().min(1).max(20),
+    description: z.string().max(200),
+    max_players: z.coerce.number().int().min(1).max(16),
+    private: z.boolean(),
+});
+
+async function editSettingsRoom(socket: Socket, user: User, data: z.infer<typeof zEditRoomData>) {
+    const { data: roomData, error } = await supabase.from('arena_users_rooms').select(`
+        arena_rooms (
+            code,
+            players,
+            host
+        )
+        `).eq('user_id', user.id).limit(1).single();
+    
+    let room;
+
+    if (Array.isArray(roomData?.arena_rooms)) {
+        room = roomData.arena_rooms[0];
+    } else {
+        room = roomData?.arena_rooms;
+    }
+
+    if (error || !room?.code || room?.host !== user.id){
+        return emitError(socket, 'coreError', 'Cannot edit settings, user is not a room host.');
+    }
+
+    let parsedData;
+
+    try {
+        parsedData = zEditRoomData.parse(data);
+    } catch (e){
+        return emitError(socket, 'inputError', 'Invalid input data type for settings.');
+    }
+
+    if (parsedData.max_players < room.players.length){
+        return emitError(socket, 'coreError', 'Cannot set max players lower than current player count.');
+    }
+
+    const { error: updateSettingsError } = await supabase.from('arena_rooms').update({
+        ...parsedData
+    }).eq('code', room.code);
+
+    if (updateSettingsError){
+        return emitError(socket, 'supabaseError', 'Error editing room settings.', updateSettingsError);
+    }
+
+    socket.emit('edit-settings:success');
+    
+    return true;
+};
+
+const zEditGameData = z.object({
+    mode: zModeEnum,
+    duration: z.coerce.number().int().min(1).max(300)
+});
+
+async function editSettingsGame(socket: Socket, user: User, data: z.infer<typeof zEditGameData>) {
+    const { data: roomData, error } = await supabase.from('arena_users_rooms').select(`
+        arena_rooms (
+            code,
+            host
+        )
+        `).eq('user_id', user.id).limit(1).single();
+    
+    let room;
+
+    if (Array.isArray(roomData?.arena_rooms)) {
+        room = roomData.arena_rooms[0];
+    } else {
+        room = roomData?.arena_rooms;
+    }
+
+    if (error || !room?.code || room?.host !== user.id){
+        return emitError(socket, 'coreError', 'Cannot edit settings, user is not a room host.');
+    }
+
+    let parsedData;
+
+    try {
+        parsedData = zEditGameData.parse(data);
+    } catch (e){
+        return emitError(socket, 'inputError', 'Invalid input data type for settings.');
+    }
+
+    const { error: updateSettingsError } = await supabase.from('arena_rooms').update({
+        mode: parsedData.mode,
+        settings_game: parsedData
+    }).eq('code', room.code);
+
+    if (updateSettingsError){
+        return emitError(socket, 'supabaseError', 'Error editing game settings.', updateSettingsError);
+    }
+
+    socket.emit('edit-settings:success');
+
+    return true;
+}
+
+const zSourceData = z.object({
+    problemCount: z.coerce.number().int().min(0).max(100),
+    correctValue: z.coerce.number(),
+    incorrectValue: z.coerce.number(),
+    blankValue: z.coerce.number(),
+    selected: z.boolean()
+});
+
+const zEditProblemsetData = z.object({
+    amc8: zSourceData,
+    amc10: zSourceData,
+    amc12: zSourceData,
+    aime: zSourceData,
+    mo: zSourceData
+});
+
+async function editSettingsProblemset(socket: Socket, user: User, data: z.infer<typeof zEditProblemsetData>) {
+    const { data: roomData, error } = await supabase.from('arena_users_rooms').select(`
+        arena_rooms (
+            code,
+            host
+        )
+        `).eq('user_id', user.id).limit(1).single();
+    
+    let room;
+
+    if (Array.isArray(roomData?.arena_rooms)) {
+        room = roomData.arena_rooms[0];
+    } else {
+        room = roomData?.arena_rooms;
+    }
+
+    if (error || !room?.code || room?.host !== user.id){
+        return emitError(socket, 'coreError', 'Cannot edit settings, user is not a room host.');
+    }
+
+    let parsedData;
+
+    try {
+        parsedData = zEditProblemsetData.parse(data);
+    } catch (e){
+        return emitError(socket, 'inputError', 'Invalid input data type for settings.');
+    }
+
+    const { error: updateSettingsError } = await supabase.from('arena_rooms').update({
+        settings_problemset: parsedData
+    }).eq('code', room.code);
+
+    if (updateSettingsError){
+        return emitError(socket, 'supabaseError', 'Error editing problemset settings.', updateSettingsError);
+    }
+
+    socket.emit('edit-settings:success');
+    
+    return true;
+}
+
+export { createRoom, joinRoom, editSettingsRoom, editSettingsGame, editSettingsProblemset };
